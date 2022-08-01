@@ -1,0 +1,12 @@
+proxyPass:
+  target: "https://test.com"
+  exposedAddress: "localhost:8000"
+  exposedAddressSsl: "localhost:44300"
+  allowedHttpHeaders:
+    - user-agent
+    - cookie
+
+ssl:
+  enabled: true
+  cert: ./localhost.pem
+  privateKey: ./localhost-key.pem

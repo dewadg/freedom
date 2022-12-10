@@ -3,8 +3,9 @@ package client
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"os/signal"
 	"time"
@@ -91,7 +92,8 @@ func handleRedirect(cfg *config.Config) http.Handler {
 }
 
 func handleProxyPass(cfg *config.Config) http.Handler {
-	proxy := newProxyPasser(cfg)
+	targetURL, _ := url.Parse(cfg.ProxyPass.Target)
+	proxy := httputil.NewSingleHostReverseProxy(targetURL)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		log := logrus.WithFields(logrus.Fields{
@@ -101,23 +103,11 @@ func handleProxyPass(cfg *config.Config) http.Handler {
 			"target":         cfg.ProxyPass.Target + r.URL.Path,
 		})
 
-		start := time.Now()
-		resp, err := proxy.Call(r.Context(), r)
-		if err != nil {
-			log.WithError(err).Error("request to target error")
-			_, _ = fmt.Fprintf(w, err.Error())
-			return
-		}
-		log = log.WithField("latency", time.Now().Sub(start).Milliseconds())
+		r.Host = targetURL.Host
+		r.URL.Host = targetURL.Host
+		r.URL.Scheme = targetURL.Scheme
 
-		for key, values := range resp.headers {
-			for _, value := range values {
-				w.Header().Add(key, value)
-			}
-		}
-
-		w.WriteHeader(resp.statusCode)
-		_, _ = w.Write(resp.body)
+		proxy.ServeHTTP(w, r)
 
 		log.Info("incoming request")
 	})

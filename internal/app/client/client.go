@@ -10,12 +10,14 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/dewadg/freedom/internal/certresolver"
 	"github.com/dewadg/freedom/internal/config"
 	"github.com/sirupsen/logrus"
 )
 
 func Run(cfg *config.Config) {
 	var httpServer, httpsServer *http.Server
+	var certResolver certresolver.Resolver
 
 	if cfg.SSL.Enabled {
 		httpAddr := "127.0.0.1:8000"
@@ -34,6 +36,11 @@ func Run(cfg *config.Config) {
 		httpsServer = &http.Server{
 			Addr:    httpsAddr,
 			Handler: handleProxyPass(cfg),
+		}
+
+		certResolver = certresolver.NewFileResolver(cfg)
+		if err := certResolver.Init(); err != nil {
+			logrus.WithError(err).Fatal("failed to init certificate resolver")
 		}
 	} else {
 		httpAddr := "127.0.0.1:8000"
@@ -60,7 +67,7 @@ func Run(cfg *config.Config) {
 		if httpsServer == nil {
 			return
 		}
-		if err := httpsServer.ListenAndServeTLS(cfg.SSL.Cert, cfg.SSL.PrivateKey); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := httpsServer.ListenAndServeTLS(certResolver.Cert(), certResolver.PrivateKey()); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logrus.WithError(err).Error("failed to start https server")
 			doneChan <- nil
 		}
